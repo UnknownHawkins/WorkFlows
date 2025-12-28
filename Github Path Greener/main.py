@@ -3,7 +3,7 @@ import random
 import subprocess
 from datetime import datetime, timedelta
 
-# ---------------- Utility Functions ---------------- #
+# -------------------- INPUT HELPERS -------------------- #
 
 def ask_int(prompt, default):
     val = input(f"{prompt} (default {default}): ").strip()
@@ -13,6 +13,11 @@ def ask_yes_no(prompt, default="n"):
     val = input(f"{prompt} (y/n, default {default}): ").strip().lower()
     return val if val in ["y", "n"] else default
 
+# -------------------- DATE HELPERS -------------------- #
+
+def is_weekend(date):
+    return date.weekday() >= 5  # Sat = 5, Sun = 6
+
 def random_time_on_day(day):
     return day + timedelta(
         hours=random.randint(9, 21),
@@ -20,36 +25,38 @@ def random_time_on_day(day):
         seconds=random.randint(0, 59)
     )
 
-def is_weekend(date):
-    return date.weekday() >= 5  # 5 = Sat, 6 = Sun
-
-# ---------------- Date Generators ---------------- #
-
-def get_random_day(last_n_days, weekend_only=False):
+def get_random_day_previous_year(weekend_only=False):
     today = datetime.now()
-    start = today - timedelta(days=last_n_days)
+    prev_year = today.year - 1
+
+    start = datetime(prev_year, 1, 1)
+    end = datetime(prev_year, 12, 31)
+    total_days = (end - start).days
 
     while True:
-        day = start + timedelta(days=random.randint(0, last_n_days))
+        day = start + timedelta(days=random.randint(0, total_days))
         if not weekend_only or is_weekend(day):
             return day.replace(hour=0, minute=0, second=0)
 
-def generate_commits_one_day(commits, last_n_days, weekend_only):
-    day = get_random_day(last_n_days, weekend_only)
-    return [random_time_on_day(day) for _ in range(commits)]
+# -------------------- COMMIT DATE GENERATORS -------------------- #
 
-def generate_random_commits(total, last_n_days, weekend_only):
+def generate_random_commits_prev_year(total, weekend_only):
     commits = []
     for _ in range(total):
-        day = get_random_day(last_n_days, weekend_only)
+        day = get_random_day_previous_year(weekend_only)
         commits.append(random_time_on_day(day))
     return commits
 
-# ---------------- Git Commit Logic ---------------- #
+def generate_commits_one_day_prev_year(commits, weekend_only):
+    day = get_random_day_previous_year(weekend_only)
+    return [random_time_on_day(day) for _ in range(commits)]
 
-def make_commit(repo, filename, date, msg="graph-greener"):
-    path = os.path.join(repo, filename)
-    with open(path, "a") as f:
+# -------------------- GIT COMMIT LOGIC -------------------- #
+
+def make_commit(repo, filename, date, message="graph-greener"):
+    filepath = os.path.join(repo, filename)
+
+    with open(filepath, "a") as f:
         f.write(f"Commit at {date.isoformat()}\n")
 
     subprocess.run(["git", "add", filename], cwd=repo)
@@ -60,56 +67,53 @@ def make_commit(repo, filename, date, msg="graph-greener"):
     env["GIT_COMMITTER_DATE"] = date_str
 
     subprocess.run(
-        ["git", "commit", "-m", msg],
+        ["git", "commit", "-m", message],
         cwd=repo,
         env=env
     )
 
-# ---------------- Main Program ---------------- #
+# -------------------- MAIN PROGRAM -------------------- #
 
 def main():
-    print("\n🌱 GitHub Contribution Graph Generator 🌱\n")
+    print("\n🌿 Graph-Greener — Previous Year Commit Generator 🌿\n")
 
     repo = input("Enter repo path (default current): ").strip() or "."
-    filename = input("Filename to modify (default data1.txt): ").strip() or "data1.txt"
+    filename = input("Filename to modify (default data.txt): ").strip() or "data.txt"
 
-    weekend_only = ask_yes_no("Weekend only commits?", "n") == "y"
+    weekend_only = ask_yes_no("Weekend-only commits?", "n") == "y"
 
-    print("\nChoose Mode:")
-    print("1 → Random commits over days")
-    print("2 → MANY commits in ONE single day")
+    print("\nChoose Commit Mode:")
+    print("1 → Random commits across ENTIRE previous year")
+    print("2 → MANY commits in ONE single day (previous year)")
 
     mode = input("Enter mode (1/2): ").strip()
 
-    last_n_days = ask_int("Consider commits within how many days", 20)
-
     if mode == "2":
         commits_per_day = ask_int("How many commits in that ONE day", 10)
-        commit_dates = generate_commits_one_day(
+        commit_dates = generate_commits_one_day_prev_year(
             commits_per_day,
-            last_n_days,
             weekend_only
         )
     else:
-        total_commits = ask_int("Total number of commits", 20)
-        commit_dates = generate_random_commits(
+        total_commits = ask_int("Total commits across previous year", 200)
+        commit_dates = generate_random_commits_prev_year(
             total_commits,
-            last_n_days,
             weekend_only
         )
 
     print(f"\nCreating {len(commit_dates)} commits...\n")
 
     for i, date in enumerate(commit_dates, 1):
-        print(f"[{i}] Commit at {date}")
+        print(f"[{i}/{len(commit_dates)}] Commit at {date}")
         make_commit(repo, filename, date)
 
-    print("\n🚀 Pushing to remote...")
+    print("\n🚀 Pushing commits to GitHub...")
     subprocess.run(["git", "push"], cwd=repo)
 
-    print("\n✅ DONE! Check GitHub graph in few minutes.\n")
+    print("\n✅ DONE!")
+    print("⏳ GitHub graph will update in a few minutes.\n")
 
-# ---------------- Run ---------------- #
+# -------------------- RUN -------------------- #
 
 if __name__ == "__main__":
     main()
