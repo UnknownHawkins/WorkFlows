@@ -3,76 +3,113 @@ import random
 import subprocess
 from datetime import datetime, timedelta
 
-def get_positive_int(prompt, default=20):
-    while True:
-        try:
-            user_input = input(f"{prompt} (default {default}): ")
-            if not user_input.strip():
-                return default
-            value = int(user_input)
-            if value > 0:
-                return value
-            else:
-                print("Please enter a positive integer.")
-        except ValueError:
-            print("Invalid input. Please enter a valid integer.")
+# ---------------- Utility Functions ---------------- #
 
-def get_repo_path(prompt, default="."):
-    while True:
-        user_input = input(f"{prompt} (default current directory): ")
-        if not user_input.strip():
-            return default
-        if os.path.isdir(user_input):
-            return user_input
-        else:
-            print("Directory does not exist. Please enter a valid path.")
+def ask_int(prompt, default):
+    val = input(f"{prompt} (default {default}): ").strip()
+    return int(val) if val.isdigit() else default
 
-def get_filename(prompt, default="data.txt"):
-    user_input = input(f"{prompt} (default {default}): ")
-    if not user_input.strip():
-        return default
-    return user_input
+def ask_yes_no(prompt, default="n"):
+    val = input(f"{prompt} (y/n, default {default}): ").strip().lower()
+    return val if val in ["y", "n"] else default
 
-def random_date_in_last_year():
+def random_time_on_day(day):
+    return day + timedelta(
+        hours=random.randint(9, 21),
+        minutes=random.randint(0, 59),
+        seconds=random.randint(0, 59)
+    )
+
+def is_weekend(date):
+    return date.weekday() >= 5  # 5 = Sat, 6 = Sun
+
+# ---------------- Date Generators ---------------- #
+
+def get_random_day(last_n_days, weekend_only=False):
     today = datetime.now()
-    start_date = today - timedelta(days=365)
-    random_days = random.randint(0, 364)
-    random_seconds = random.randint(0, 23*3600 + 3599)
-    commit_date = start_date + timedelta(days=random_days, seconds=random_seconds)
-    return commit_date
+    start = today - timedelta(days=last_n_days)
 
-def make_commit(date, repo_path, filename, message="graph-greener!"):
-    filepath = os.path.join(repo_path, filename)
-    with open(filepath, "a") as f:
+    while True:
+        day = start + timedelta(days=random.randint(0, last_n_days))
+        if not weekend_only or is_weekend(day):
+            return day.replace(hour=0, minute=0, second=0)
+
+def generate_commits_one_day(commits, last_n_days, weekend_only):
+    day = get_random_day(last_n_days, weekend_only)
+    return [random_time_on_day(day) for _ in range(commits)]
+
+def generate_random_commits(total, last_n_days, weekend_only):
+    commits = []
+    for _ in range(total):
+        day = get_random_day(last_n_days, weekend_only)
+        commits.append(random_time_on_day(day))
+    return commits
+
+# ---------------- Git Commit Logic ---------------- #
+
+def make_commit(repo, filename, date, msg="graph-greener"):
+    path = os.path.join(repo, filename)
+    with open(path, "a") as f:
         f.write(f"Commit at {date.isoformat()}\n")
-    subprocess.run(["git", "add", filename], cwd=repo_path)
+
+    subprocess.run(["git", "add", filename], cwd=repo)
+
     env = os.environ.copy()
     date_str = date.strftime("%Y-%m-%dT%H:%M:%S")
     env["GIT_AUTHOR_DATE"] = date_str
     env["GIT_COMMITTER_DATE"] = date_str
-    subprocess.run(["git", "commit", "-m", message], cwd=repo_path, env=env)
+
+    subprocess.run(
+        ["git", "commit", "-m", msg],
+        cwd=repo,
+        env=env
+    )
+
+# ---------------- Main Program ---------------- #
 
 def main():
-    print("="*60)
-    print("🌱 Welcome to graph-greener - GitHub Contribution Graph Commit Generator 🌱")
-    print("="*60)
-    print("This tool will help you fill your GitHub contribution graph with custom commits.\n")
+    print("\n🌱 GitHub Contribution Graph Generator 🌱\n")
 
-    num_commits = get_positive_int("How many commits do you want to make", 20)
-    repo_path = get_repo_path("Enter the path to your local git repository", ".")
-    filename = get_filename("Enter the filename to modify for commits", "data.txt")
+    repo = input("Enter repo path (default current): ").strip() or "."
+    filename = input("Filename to modify (default data.txt): ").strip() or "data.txt"
 
-    print(f"\nMaking {num_commits} commits in repo: {repo_path}\nModifying file: {filename}\n")
+    weekend_only = ask_yes_no("Weekend only commits?", "n") == "y"
 
-    for i in range(num_commits):
-        commit_date = random_date_in_last_year()
-        print(f"[{i+1}/{num_commits}] Committing at {commit_date.strftime('%Y-%m-%d %H:%M:%S')}")
-        make_commit(commit_date, repo_path, filename)
+    print("\nChoose Mode:")
+    print("1 → Random commits over days")
+    print("2 → MANY commits in ONE single day")
 
-    print("\nPushing commits to your remote repository...")
-    subprocess.run(["git", "push"], cwd=repo_path)
-    print("✅ All done! Check your GitHub contribution graph in a few minutes.\n")
-    print("Tip: Use a dedicated repository for best results. Happy coding!")
+    mode = input("Enter mode (1/2): ").strip()
+
+    last_n_days = ask_int("Consider commits within how many days", 20)
+
+    if mode == "2":
+        commits_per_day = ask_int("How many commits in that ONE day", 10)
+        commit_dates = generate_commits_one_day(
+            commits_per_day,
+            last_n_days,
+            weekend_only
+        )
+    else:
+        total_commits = ask_int("Total number of commits", 20)
+        commit_dates = generate_random_commits(
+            total_commits,
+            last_n_days,
+            weekend_only
+        )
+
+    print(f"\nCreating {len(commit_dates)} commits...\n")
+
+    for i, date in enumerate(commit_dates, 1):
+        print(f"[{i}] Commit at {date}")
+        make_commit(repo, filename, date)
+
+    print("\n🚀 Pushing to remote...")
+    subprocess.run(["git", "push"], cwd=repo)
+
+    print("\n✅ DONE! Check GitHub graph in few minutes.\n")
+
+# ---------------- Run ---------------- #
 
 if __name__ == "__main__":
     main()
