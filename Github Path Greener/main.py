@@ -71,7 +71,7 @@ def main():
     print("\n🌱 GitHub Contribution Graph Generator 🌱\n")
 
     repo = input("Enter repo path (default current): ").strip() or "."
-    filename = input("Filename to modify (default data.txt): ").strip() or "data.txt"
+    filename = input("Filename to modify (default data1.txt): ").strip() or "data1.txt"
 
     weekend_only = ask_yes_no("Weekend only commits?", "n") == "y"
 
